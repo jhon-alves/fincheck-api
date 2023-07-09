@@ -8,11 +8,12 @@ import { env } from 'src/shared/config/env';
   imports: [
     JwtModule.register({
       global: true,
-      signOptions: { expiresIn: '1d' },
+      signOptions: { expiresIn: '7d' },
       secret: env.jwtSecret,
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService]
+  providers: [AuthService],
+  exports: [],
 })
 export class AuthModule {}
