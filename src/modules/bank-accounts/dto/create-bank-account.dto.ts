@@ -17,7 +17,7 @@ export class CreateBankAccountDto {
   @IsNotEmpty({ message: 'InitialBalance precisa ser preenchido!' })
   initialBalance: number;
   
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'type precisa ser preenchido!' })
   @IsEnum(BankAccountType)
   type: BankAccountType;
 

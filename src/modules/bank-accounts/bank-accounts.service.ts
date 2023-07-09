@@ -8,7 +8,7 @@ import { ValidateBankAccountOwnershipService } from './validate-bank-account-own
 export class BankAccountsService {
   constructor(
     private readonly bankAccountsRepo: BankAccountsRepository,
-    private readonly  validateBankAccountOwnershipService: ValidateBankAccountOwnershipService, 
+    private readonly validateBankAccountOwnershipService: ValidateBankAccountOwnershipService, 
   ) {}
 
   create(userId: string, createBankAccountDto: CreateBankAccountDto) {
@@ -16,18 +16,46 @@ export class BankAccountsService {
 
     return this.bankAccountsRepo.create({
       data: {
+        userId,
         color,
         name,
         initialBalance,
         type,
-        userId,
       }
     });
   }
 
-  findAllByUserId(userId: string) {
-    return this.bankAccountsRepo.findMany({
-      where: { userId }
+  async findAllByUserId(userId: string) {
+    const bankAccounts = await this.bankAccountsRepo.findMany({
+      where: { userId },
+      include: {
+        transactions: {
+          select: {
+            value: true,
+            type: true
+          }
+        },
+
+      }
+    });
+
+    return bankAccounts.map(({ transactions, ...bankAccount }) => {
+      const totalTransactions = transactions.reduce(
+        (acc, transaction) => 
+          acc + 
+          (transaction.type === 'INCOME' 
+          ? transaction.value 
+          : -transaction.value),
+        0,
+      );
+
+      const currentBalance = bankAccount.initialBalance + totalTransactions;
+
+      return {
+        ...bankAccount,
+        currentBalance,
+        
+      }
     });
   }
 
