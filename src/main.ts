@@ -1,16 +1,15 @@
-import 'dotenv/config';
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
-import { AppModule } from './app.module';
+import { buildServer } from './server';
+import { env } from './env';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await buildServer();
 
-  app.useGlobalPipes(new ValidationPipe());
-  app.enableCors({
-    origin: '*',
-  })
-
-  await app.listen(3000);
+  try {
+    await app.listen({ port: env.PORT, host: '0.0.0.0' });
+  } catch (error) {
+    app.log.error(error);
+    process.exit(1);
+  }
 }
+
 bootstrap();

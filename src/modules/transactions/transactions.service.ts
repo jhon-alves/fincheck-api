@@ -1,120 +1,103 @@
-import { Injectable } from '@nestjs/common';
-import { CreateTransactionDto } from './dto/create-transaction.dto';
-import { UpdateTransactionDto } from './dto/update-transaction.dto';
-import { TransactionsRepository } from 'src/shared/database/repositories/transactions.repositories';
-import { ValidateBankAccountOwnershipService } from '../bank-accounts/validate-bank-account-ownership.service';
-import { ValidateCategoryOwnershipService } from '../categories/validate-category-ownership.service';
-import { ValidateTransactionOwnershipService } from './validate-transaction-ownership.service';
-import { TransactionType } from './entities/Transaction';
+import { prisma } from '../../lib/prisma';
+import { validateBankAccountOwnership } from '../bank-accounts/validate-ownership';
+import { validateCategoryOwnership } from '../categories/validate-ownership';
+import { validateTransactionOwnership } from './validate-ownership';
+import type {
+  CreateTransactionBody,
+  UpdateTransactionBody,
+  TransactionFilters,
+} from './transactions.schemas';
 
-@Injectable()
-export class TransactionsService {
-  constructor(
-    private readonly transactionsRepo: TransactionsRepository,
-    private readonly validateBankAccountOwnershipService: ValidateBankAccountOwnershipService,
-    private readonly validateCategoryOwnershipService: ValidateCategoryOwnershipService,
-    private readonly validateTransactionOwnershipService: ValidateTransactionOwnershipService
-  ) {}
+interface ValidateOwnershipParams {
+  userId: string;
+  bankAccountId?: string;
+  categoryId?: string;
+  transactionId?: string;
+}
 
-  async create(userId: string, createTransactionDto: CreateTransactionDto) {
-    const { bankAccountId, categoryId, name, value, date, type } = createTransactionDto;
+async function validateEntitiesOwnership({
+  userId,
+  bankAccountId,
+  categoryId,
+  transactionId,
+}: ValidateOwnershipParams) {
+  await Promise.all([
+    transactionId
+      ? validateTransactionOwnership(userId, transactionId)
+      : undefined,
+    bankAccountId
+      ? validateBankAccountOwnership(userId, bankAccountId)
+      : undefined,
+    categoryId ? validateCategoryOwnership(userId, categoryId) : undefined,
+  ]);
+}
 
-    await this.validateEntitiesOwnership({
-      userId,
-      bankAccountId,
-      categoryId
-    });
-
-    return this.transactionsRepo.create({
-      data: {
-        userId,
-        bankAccountId,
-        categoryId,
-        name,
-        value,
-        date,
-        type,
-      }
-    });
-  }
-
-  findAll(userId: string, filters: { 
-    month: number;
-    year: number;
-    bankAccountId?: string;
-    type?: TransactionType
-  }) {
-    return this.transactionsRepo.findMany({
-      where: {
-        userId,
-        bankAccountId: filters.bankAccountId,
-        type: filters.type,
-        date: {
-          gte: new Date(Date.UTC(filters.year, filters.month)),
-          lt: new Date(Date.UTC(filters.year, filters.month + 1)),
-        }
-      },
-      include: {
-        category: {
-          select: {
-            id: true,
-            name: true,
-            icon: true,
-          },
-        },
-      },
-    });
-  }
-
-  async update(userId: string, transactionId: string, updateTransactionDto: UpdateTransactionDto) {
-    const { bankAccountId, categoryId, name, value, date, type } = updateTransactionDto;
-
-    await this.validateEntitiesOwnership({
-      userId,
-      bankAccountId,
-      categoryId,
-      transactionId
-    });
-
-    return this.transactionsRepo.update({
-      where: { id: transactionId },
-      data: {
-        bankAccountId,
-        categoryId,
-        name,
-        value,
-        date,
-        type,
-      }
-    });
-    
-  }
-
-  async remove(userId: string, transactionId: string) {
-    await this.validateEntitiesOwnership({ userId, transactionId });
-
-    await this.transactionsRepo.delete({
-      where: { id: transactionId },
-    });
-
-    return null;
-  }
-
-  private async validateEntitiesOwnership({
+export async function create(userId: string, body: CreateTransactionBody) {
+  await validateEntitiesOwnership({
     userId,
-    bankAccountId,
-    categoryId,
+    bankAccountId: body.bankAccountId,
+    categoryId: body.categoryId,
+  });
+
+  return prisma.transaction.create({
+    data: {
+      userId,
+      bankAccountId: body.bankAccountId,
+      categoryId: body.categoryId,
+      name: body.name,
+      value: body.value,
+      date: new Date(body.date),
+      type: body.type,
+    },
+  });
+}
+
+export function findAll(userId: string, filters: TransactionFilters) {
+  return prisma.transaction.findMany({
+    where: {
+      userId,
+      bankAccountId: filters.bankAccountId,
+      type: filters.type,
+      date: {
+        gte: new Date(Date.UTC(filters.year, filters.month)),
+        lt: new Date(Date.UTC(filters.year, filters.month + 1)),
+      },
+    },
+    include: {
+      category: {
+        select: { id: true, name: true, icon: true },
+      },
+    },
+  });
+}
+
+export async function update(
+  userId: string,
+  transactionId: string,
+  body: UpdateTransactionBody,
+) {
+  await validateEntitiesOwnership({
+    userId,
     transactionId,
-  }: { 
-    userId: string,
-    bankAccountId?: string,
-    categoryId?: string,
-    transactionId?: string,
-  }) {
-    await Promise.all([
-      transactionId && this.validateTransactionOwnershipService.validate(userId, transactionId),
-      bankAccountId && this.validateBankAccountOwnershipService.validate(userId, bankAccountId),
-      categoryId && this.validateCategoryOwnershipService.validate(userId, categoryId),
-    ]);
-  }
+    bankAccountId: body.bankAccountId,
+    categoryId: body.categoryId,
+  });
+
+  return prisma.transaction.update({
+    where: { id: transactionId },
+    data: {
+      bankAccountId: body.bankAccountId,
+      categoryId: body.categoryId,
+      name: body.name,
+      value: body.value,
+      date: new Date(body.date),
+      type: body.type,
+    },
+  });
+}
+
+export async function remove(userId: string, transactionId: string) {
+  await validateEntitiesOwnership({ userId, transactionId });
+
+  await prisma.transaction.delete({ where: { id: transactionId } });
 }

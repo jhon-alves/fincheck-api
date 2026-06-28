@@ -1,73 +1,133 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
-</p>
+# Fincheck API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+API REST do Fincheck — controle de finanças pessoais (contas bancárias, categorias e transações).
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Construída com **Fastify** + **Prisma** sobre **PostgreSQL (Supabase)**, com autenticação via **JWT próprio** (Bearer) e validação com **Zod**.
 
-## Description
+## Stack
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- [Fastify 5](https://fastify.dev/) — servidor HTTP
+- [Prisma 6](https://www.prisma.io/) — ORM
+- [PostgreSQL](https://www.postgresql.org/) via [Supabase](https://supabase.com/)
+- [Zod 4](https://zod.dev/) — validação de body/query/params
+- [@fastify/jwt](https://github.com/fastify/fastify-jwt) + [bcryptjs](https://github.com/dcodeIO/bcrypt.js) — auth
+- TypeScript · ESLint · tsx
 
-## Installation
+## Pré-requisitos
+
+- Node.js `>= 22.12`
+- Yarn
+- Um projeto no [Supabase](https://supabase.com/) (Postgres)
+
+## Configuração
+
+1. Instale as dependências:
+
+   ```bash
+   yarn install
+   ```
+
+2. Crie o arquivo `.env` a partir do exemplo:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+3. Preencha as variáveis. As connection strings do Supabase ficam em **Connect → ORMs/Prisma** (ou em _Project Settings → Database_):
+
+   ```bash
+   # App
+   PORT=3000
+
+   # Segredo do JWT (gere um forte: openssl rand -hex 32)
+   JWT_SECRET="..."
+
+   # Conexão "pooled" (Transaction pooler, porta 6543) — usada pela aplicação
+   DATABASE_URL="postgresql://postgres.<project-ref>:<password>@<region>.pooler.supabase.com:6543/postgres?pgbouncer=true"
+
+   # Conexão direta (porta 5432) — usada pelas migrations
+   DIRECT_URL="postgresql://postgres.<project-ref>:<password>@<region>.pooler.supabase.com:5432/postgres"
+   ```
+
+   > ⚠️ Se a senha tiver caracteres especiais (`@ : / # ?`), faça **URL-encode** (ex.: `@` → `%40`).
+   > O prefixo do host do pooler pode ser `aws-0-` **ou** `aws-1-` dependendo do projeto — copie o host exato que o Supabase mostra.
+
+4. Gere o Prisma Client e aplique o schema no banco:
+
+   ```bash
+   yarn prisma:generate
+   yarn prisma:migrate     # prisma migrate deploy
+   ```
+
+## Rodando
 
 ```bash
-$ yarn install
+yarn dev      # desenvolvimento (watch, tsx) — http://localhost:3000
+yarn build    # compila para dist/
+yarn start    # produção (node dist/main.js)
 ```
 
-## Running the app
+Healthcheck: `GET /health` → `{ "status": "ok" }`.
 
-```bash
-# development
-$ yarn run start
+## Scripts
 
-# watch mode
-$ yarn run start:dev
+| Script | Descrição |
+|---|---|
+| `yarn dev` | Sobe a API em watch mode |
+| `yarn build` | Compila TypeScript para `dist/` |
+| `yarn start` | Roda a versão compilada |
+| `yarn lint` | ESLint |
+| `yarn prisma:generate` | Gera o Prisma Client |
+| `yarn prisma:migrate` | Aplica as migrations (`migrate deploy`) |
+| `yarn prisma:migrate:dev` | Cria/aplica migration em dev |
+| `yarn prisma:studio` | Abre o Prisma Studio |
 
-# production mode
-$ yarn run start:prod
+## Autenticação
+
+- `POST /auth/signup` e `POST /auth/signin` são públicas e retornam `{ accessToken }`.
+- As demais rotas exigem o header `Authorization: Bearer <accessToken>`.
+- O token é um JWT com payload `{ sub: <userId> }` e expiração de `7d`.
+- Senhas são armazenadas com hash `bcrypt` (12 rounds).
+- No signup, o usuário já é criado com um conjunto padrão de **12 categorias** (receitas e despesas).
+
+## Endpoints
+
+| Método | Rota | Auth | Descrição |
+|---|---|:---:|---|
+| `POST` | `/auth/signin` | — | Login → `{ accessToken }` |
+| `POST` | `/auth/signup` | — | Cadastro → `{ accessToken }` (+ categorias padrão) |
+| `GET` | `/users/me` | ✅ | Dados do usuário logado |
+| `POST` | `/bank-accounts` | ✅ | Cria conta bancária |
+| `GET` | `/bank-accounts` | ✅ | Lista contas (com `currentBalance` calculado) |
+| `PUT` | `/bank-accounts/:bankAccountId` | ✅ | Atualiza conta |
+| `DELETE` | `/bank-accounts/:bankAccountId` | ✅ | Remove conta (`204`) |
+| `GET` | `/categories` | ✅ | Lista categorias do usuário |
+| `POST` | `/transactions` | ✅ | Cria transação |
+| `GET` | `/transactions?month&year&bankAccountId?&type?` | ✅ | Lista transações por período |
+| `PUT` | `/transactions/:transactionId` | ✅ | Atualiza transação |
+| `DELETE` | `/transactions/:transactionId` | ✅ | Remove transação (`204`) |
+
+Respostas de erro seguem o formato `{ statusCode, error, message }` (erros de validação do Zod incluem também `issues`).
+
+## Estrutura
+
+```
+src/
+  main.ts                  # bootstrap (listen)
+  server.ts                # cria o Fastify, plugins, error handler e registra as rotas
+  env.ts                   # validação das variáveis de ambiente (Zod)
+  lib/                     # prisma client e classes de erro
+  plugins/auth.ts          # @fastify/jwt + preHandler `authenticate`
+  @types/fastify.d.ts      # augmentations (request.userId, app.authenticate)
+  modules/
+    auth/                  # signin, signup
+    users/                 # /users/me
+    bank-accounts/         # CRUD + cálculo de saldo
+    categories/            # listagem
+    transactions/          # CRUD + filtro por período
+prisma/
+  schema.prisma            # modelos User, BankAccount, Category, Transaction
+  migrations/              # migrations versionadas
 ```
 
-## Test
-
-```bash
-# unit tests
-$ yarn run test
-
-# e2e tests
-$ yarn run test:e2e
-
-# test coverage
-$ yarn run test:cov
-```
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](LICENSE).
+Cada módulo segue o padrão `*.routes.ts` (rotas), `*.service.ts` (regra de negócio), `*.schemas.ts` (validação Zod) e `validate-ownership.ts` (garante que o recurso pertence ao usuário).

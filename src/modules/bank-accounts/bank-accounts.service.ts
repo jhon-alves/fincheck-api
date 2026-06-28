@@ -1,87 +1,54 @@
-import { Injectable } from '@nestjs/common';
-import { CreateBankAccountDto } from './dto/create-bank-account.dto';
-import { UpdateBankAccountDto } from './dto/update-bank-account.dto';
-import { BankAccountsRepository } from 'src/shared/database/repositories/bank-accounts.repositories';
-import { ValidateBankAccountOwnershipService } from './validate-bank-account-ownership.service';
+import { prisma } from '../../lib/prisma';
+import { validateBankAccountOwnership } from './validate-ownership';
+import type {
+  CreateBankAccountBody,
+  UpdateBankAccountBody,
+} from './bank-accounts.schemas';
 
-@Injectable()
-export class BankAccountsService {
-  constructor(
-    private readonly bankAccountsRepo: BankAccountsRepository,
-    private readonly validateBankAccountOwnershipService: ValidateBankAccountOwnershipService, 
-  ) {}
+export function create(userId: string, data: CreateBankAccountBody) {
+  return prisma.bankAccount.create({
+    data: { userId, ...data },
+  });
+}
 
-  create(userId: string, createBankAccountDto: CreateBankAccountDto) {
-    const { color, name, initialBalance, type } = createBankAccountDto;
+export async function findAllByUserId(userId: string) {
+  const bankAccounts = await prisma.bankAccount.findMany({
+    where: { userId },
+    include: {
+      transactions: {
+        select: { value: true, type: true },
+      },
+    },
+  });
 
-    return this.bankAccountsRepo.create({
-      data: {
-        userId,
-        color,
-        name,
-        initialBalance,
-        type,
-      }
-    });
-  }
+  return bankAccounts.map(({ transactions, ...bankAccount }) => {
+    const totalTransactions = transactions.reduce(
+      (acc, transaction) =>
+        acc + (transaction.type === 'INCOME' ? transaction.value : -transaction.value),
+      0,
+    );
 
-  async findAllByUserId(userId: string) {
-    const bankAccounts = await this.bankAccountsRepo.findMany({
-      where: { userId },
-      include: {
-        transactions: {
-          select: {
-            value: true,
-            type: true
-          }
-        },
+    const currentBalance = bankAccount.initialBalance + totalTransactions;
 
-      }
-    });
+    return { ...bankAccount, currentBalance };
+  });
+}
 
-    return bankAccounts.map(({ transactions, ...bankAccount }) => {
-      const totalTransactions = transactions.reduce(
-        (acc, transaction) => 
-          acc + 
-          (transaction.type === 'INCOME' 
-          ? transaction.value 
-          : -transaction.value),
-        0,
-      );
+export async function update(
+  userId: string,
+  bankAccountId: string,
+  data: UpdateBankAccountBody,
+) {
+  await validateBankAccountOwnership(userId, bankAccountId);
 
-      const currentBalance = bankAccount.initialBalance + totalTransactions;
+  return prisma.bankAccount.update({
+    where: { id: bankAccountId },
+    data,
+  });
+}
 
-      return {
-        ...bankAccount,
-        currentBalance,
-        
-      }
-    });
-  }
+export async function remove(userId: string, bankAccountId: string) {
+  await validateBankAccountOwnership(userId, bankAccountId);
 
-  async update(userId: string, bankAccountId: string, updateBankAccountDto: UpdateBankAccountDto) {
-    await this.validateBankAccountOwnershipService.validate(userId, bankAccountId);
-
-    const { color, name, initialBalance, type } = updateBankAccountDto;
-
-    return this.bankAccountsRepo.update({
-      where: { id: bankAccountId },
-      data: {
-        color,
-        name,
-        initialBalance,
-        type
-      }
-    });
-  }
-
-  async remove(userId: string, bankAccountId: string) {
-    await this.validateBankAccountOwnershipService.validate(userId, bankAccountId);
-
-    await this.bankAccountsRepo.delete({
-      where: { id: bankAccountId },
-    });
-
-    return null;
-  }
+  await prisma.bankAccount.delete({ where: { id: bankAccountId } });
 }

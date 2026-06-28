@@ -1,13 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { CategoriesRepository } from 'src/shared/database/repositories/categories.repositories';
+import { prisma } from '../../lib/prisma';
 
-@Injectable()
-export class CategoriesService {
-  constructor(private readonly categoriesRepo: CategoriesRepository) {}
-
-  findAllByUserId(userId: string) {
-    return this.categoriesRepo.findMany({
-      where: { userId }
-    });
-  }
+export function findAllByUserId(userId: string) {
+  return prisma.category.findMany({ where: { userId } });
 }

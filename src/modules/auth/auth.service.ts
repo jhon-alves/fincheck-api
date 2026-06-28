@@ -1,91 +1,66 @@
-import {
-  Injectable,
-  UnauthorizedException,
-  ConflictException
-} from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { compare, hash } from 'bcryptjs';
-import { SigninDto } from './dto/signin.dto';
-import { SignupDto } from './dto/signup.dto';
-import { UsersRepository } from 'src/shared/database/repositories/users.repositories';
+import { hash, compare } from 'bcryptjs';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../../lib/prisma';
+import { conflict, unauthorized } from '../../lib/errors';
+import type { SigninBody, SignupBody } from './auth.schemas';
 
-@Injectable()
-export class AuthService {
-  constructor(
-    private readonly usersRepo: UsersRepository,
-    private readonly jwtService: JwtService,
-  ) {}
+type SignToken = (userId: string) => string;
 
-  async signin(signinDto: SigninDto) {
-    const { email, password } = signinDto;
+const DEFAULT_CATEGORIES: Prisma.CategoryCreateManyUserInput[] = [
+  // Income
+  { name: 'Salário', icon: 'salary', type: 'INCOME' },
+  { name: 'Freelance', icon: 'freelance', type: 'INCOME' },
+  { name: 'Outro', icon: 'other', type: 'INCOME' },
+  // Expense
+  { name: 'Casa', icon: 'home', type: 'EXPENSE' },
+  { name: 'Alimentação', icon: 'food', type: 'EXPENSE' },
+  { name: 'Educação', icon: 'education', type: 'EXPENSE' },
+  { name: 'Lazer', icon: 'fun', type: 'EXPENSE' },
+  { name: 'Mercado', icon: 'grocery', type: 'EXPENSE' },
+  { name: 'Roupas', icon: 'clothes', type: 'EXPENSE' },
+  { name: 'Transporte', icon: 'transport', type: 'EXPENSE' },
+  { name: 'Viagem', icon: 'travel', type: 'EXPENSE' },
+  { name: 'Outro', icon: 'other', type: 'EXPENSE' },
+];
 
-    const user = await this.usersRepo.findUnique({
-      where: { email }
-    });
+export async function signin(body: SigninBody, signToken: SignToken) {
+  const user = await prisma.user.findUnique({ where: { email: body.email } });
 
-    if (!user) {
-      throw new UnauthorizedException('Credenciais inválidas!')
-    }
-
-    const comparePassword = await compare(password, user.password);
-
-    if (!comparePassword) {
-      throw new UnauthorizedException('Senha Inválida!')
-    }
-
-    const accessToken = await this.generateAccessToken(user.id);
-
-    return { accessToken };
+  if (!user) {
+    throw unauthorized('Credenciais inválidas');
   }
 
-  async signup(signupDto: SignupDto) {
-    const { name, email, password } = signupDto;
+  const isPasswordValid = await compare(body.password, user.password);
 
-    const emailTaken = await this.usersRepo.findUnique({
-      where: { email },
-      select: { id: true }
-    });
+  if (!isPasswordValid) {
+    throw unauthorized('Credenciais inválidas');
+  }
 
-    if (emailTaken) {
-      throw new ConflictException('E-mail já cadastrado!');
-    }
+  return { accessToken: signToken(user.id) };
+}
 
-    const hashedPassword = await hash(password, 12);
+export async function signup(body: SignupBody, signToken: SignToken) {
+  const emailTaken = await prisma.user.findUnique({
+    where: { email: body.email },
+    select: { id: true },
+  });
 
-    const user = await this.usersRepo.create({
-      data: {
-        name,
-        email,
-        password: hashedPassword,
-        categories: {
-          createMany: {
-            data: [
-              // Income
-              { name: 'Salário', icon: 'salary', type: 'INCOME' },
-              { name: 'Freelance', icon: 'freelance', type: 'INCOME' },
-              { name: 'Outro', icon: 'other', type: 'INCOME' },
-              // Expense
-              { name: 'Casa', icon: 'home', type: 'EXPENSE' },
-              { name: 'Alimentação', icon: 'food', type: 'EXPENSE' },
-              { name: 'Educação', icon: 'education', type: 'EXPENSE' },
-              { name: 'Lazer', icon: 'fun', type: 'EXPENSE' },
-              { name: 'Mercado', icon: 'grocery', type: 'EXPENSE' },
-              { name: 'Roupas', icon: 'clothes', type: 'EXPENSE' },
-              { name: 'Transporte', icon: 'transport', type: 'EXPENSE' },
-              { name: 'Viagem', icon: 'travel', type: 'EXPENSE' },
-              { name: 'Outro', icon: 'other', type: 'EXPENSE' },
-            ],
-          },
-        },
+  if (emailTaken) {
+    throw conflict('E-mail já cadastrado');
+  }
+
+  const hashedPassword = await hash(body.password, 12);
+
+  const user = await prisma.user.create({
+    data: {
+      name: body.name,
+      email: body.email,
+      password: hashedPassword,
+      categories: {
+        createMany: { data: DEFAULT_CATEGORIES },
       },
-    });
+    },
+  });
 
-    const accessToken = await this.generateAccessToken(user.id);
-
-    return { accessToken };
-  }
-
-  private generateAccessToken(userId: string) {
-    return this.jwtService.signAsync({ sub: userId });
-  }
+  return { accessToken: signToken(user.id) };
 }
