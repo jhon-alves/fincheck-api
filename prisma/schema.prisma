@@ -41,7 +41,8 @@ model BankAccount {
   type           BankAccountType
   color          String
 
-  transactions Transaction[]
+  transactions      Transaction[] @relation("TransactionAccount")
+  incomingTransfers Transaction[] @relation("TransferDestination")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -51,6 +52,7 @@ model BankAccount {
 enum TransactionType {
   INCOME
   EXPENSE
+  TRANSFER
 
   @@map("transaction_type")
 }
@@ -70,18 +72,21 @@ model Category {
 }
 
 model Transaction {
-  id            String          @id @default(uuid()) @db.Uuid
-  userId        String          @map("user_id") @db.Uuid
-  bankAccountId String          @map("bank_account_id") @db.Uuid
-  categoryId    String?         @map("category_id") @db.Uuid
-  name          String
-  value         Float
-  date          DateTime
-  type          TransactionType
+  id             String          @id @default(uuid()) @db.Uuid
+  userId         String          @map("user_id") @db.Uuid
+  bankAccountId  String          @map("bank_account_id") @db.Uuid
+  toBankAccountId String?        @map("to_bank_account_id") @db.Uuid
+  categoryId     String?         @map("category_id") @db.Uuid
+  name           String
+  value          Float
+  date           DateTime
+  type           TransactionType
+  paid           Boolean         @default(true)
 
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
-  category    Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankAccount   BankAccount  @relation("TransactionAccount", fields: [bankAccountId], references: [id], onDelete: Cascade)
+  toBankAccount BankAccount? @relation("TransferDestination", fields: [toBankAccountId], references: [id], onDelete: Cascade)
+  category      Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@map("transactions")
 }

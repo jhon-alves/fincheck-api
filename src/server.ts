@@ -9,6 +9,7 @@ import { usersRoutes } from './modules/users/users.routes';
 import { bankAccountsRoutes } from './modules/bank-accounts/bank-accounts.routes';
 import { categoriesRoutes } from './modules/categories/categories.routes';
 import { transactionsRoutes } from './modules/transactions/transactions.routes';
+import { transfersRoutes } from './modules/transfers/transfers.routes';
 
 export async function buildServer() {
   const app = Fastify({ logger: true });
@@ -60,6 +61,7 @@ export async function buildServer() {
   await app.register(bankAccountsRoutes, { prefix: '/bank-accounts' });
   await app.register(categoriesRoutes, { prefix: '/categories' });
   await app.register(transactionsRoutes, { prefix: '/transactions' });
+  await app.register(transfersRoutes, { prefix: '/transfers' });
 
   return app;
 }

@@ -15,23 +15,37 @@ export async function findAllByUserId(userId: string) {
   const bankAccounts = await prisma.bankAccount.findMany({
     where: { userId },
     include: {
+      // Movimentos em que esta conta é a origem (receitas, despesas e
+      // transferências de saída).
       transactions: {
         select: { value: true, type: true },
+      },
+      // Transferências recebidas (esta conta é o destino).
+      incomingTransfers: {
+        select: { value: true },
       },
     },
   });
 
-  return bankAccounts.map(({ transactions, ...bankAccount }) => {
-    const totalTransactions = transactions.reduce(
-      (acc, transaction) =>
-        acc + (transaction.type === 'INCOME' ? transaction.value : -transaction.value),
-      0,
-    );
+  return bankAccounts.map(
+    ({ transactions, incomingTransfers, ...bankAccount }) => {
+      const outgoing = transactions.reduce((acc, transaction) => {
+        // INCOME entra; EXPENSE e TRANSFER (saída) saem.
+        return transaction.type === 'INCOME'
+          ? acc + transaction.value
+          : acc - transaction.value;
+      }, 0);
 
-    const currentBalance = bankAccount.initialBalance + totalTransactions;
+      const incoming = incomingTransfers.reduce(
+        (acc, transfer) => acc + transfer.value,
+        0,
+      );
 
-    return { ...bankAccount, currentBalance };
-  });
+      const currentBalance = bankAccount.initialBalance + outgoing + incoming;
+
+      return { ...bankAccount, currentBalance };
+    },
+  );
 }
 
 export async function update(

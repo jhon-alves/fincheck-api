@@ -7,6 +7,7 @@ export const createTransactionSchema = z.object({
   value: z.number().positive('O valor precisa ser positivo'),
   date: z.iso.datetime({ message: 'date precisa ser uma data ISO válida' }),
   type: z.enum(['INCOME', 'EXPENSE']),
+  paid: z.boolean().default(true),
 });
 
 export const updateTransactionSchema = createTransactionSchema;

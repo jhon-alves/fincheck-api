@@ -48,6 +48,7 @@ export async function create(userId: string, body: CreateTransactionBody) {
       value: body.value,
       date: new Date(body.date),
       type: body.type,
+      paid: body.paid,
     },
   });
 }
@@ -56,8 +57,17 @@ export function findAll(userId: string, filters: TransactionFilters) {
   return prisma.transaction.findMany({
     where: {
       userId,
-      bankAccountId: filters.bankAccountId,
       type: filters.type,
+      // Ao filtrar por conta, considera tanto a origem quanto o destino
+      // (para que transferências apareçam nos dois lados).
+      ...(filters.bankAccountId
+        ? {
+            OR: [
+              { bankAccountId: filters.bankAccountId },
+              { toBankAccountId: filters.bankAccountId },
+            ],
+          }
+        : {}),
       date: {
         gte: new Date(Date.UTC(filters.year, filters.month)),
         lt: new Date(Date.UTC(filters.year, filters.month + 1)),
@@ -66,6 +76,12 @@ export function findAll(userId: string, filters: TransactionFilters) {
     include: {
       category: {
         select: { id: true, name: true, icon: true },
+      },
+      bankAccount: {
+        select: { id: true, name: true },
+      },
+      toBankAccount: {
+        select: { id: true, name: true },
       },
     },
   });
@@ -92,6 +108,7 @@ export async function update(
       value: body.value,
       date: new Date(body.date),
       type: body.type,
+      paid: body.paid,
     },
   });
 }
