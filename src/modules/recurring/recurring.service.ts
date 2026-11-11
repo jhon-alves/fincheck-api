@@ -108,6 +108,19 @@ async function generateForRule(db: Db, rule: RecurringRule, until: Date) {
   });
 }
 
+/*
+ * Cache em memória da verificação: com o banco longe, cada consulta custa
+ * caro, e não faz sentido conferir as regras a cada request. Cada usuário é
+ * conferido no máximo uma vez por minuto (ou de novo se pedir um período além
+ * do já conferido). Qualquer mudança em regra limpa o cache do usuário.
+ */
+const ENSURE_TTL_MS = 60_000;
+const ensureCache = new Map<string, { until: number; checkedAt: number }>();
+
+export function invalidateRecurringCache(userId: string) {
+  ensureCache.delete(userId);
+}
+
 /**
  * Garante as ocorrências de todas as regras ativas até `until` (no mínimo a
  * janela padrão) e confirma sozinhas as de `autoConfirm` cuja data chegou.
@@ -116,6 +129,15 @@ async function generateForRule(db: Db, rule: RecurringRule, until: Date) {
  */
 export async function ensureRecurringOccurrences(userId: string, until: Date) {
   const target = laterOf(defaultWindowEnd(), until);
+  const cached = ensureCache.get(userId);
+
+  if (
+    cached &&
+    cached.until >= target.getTime() &&
+    Date.now() - cached.checkedAt < ENSURE_TTL_MS
+  ) {
+    return;
+  }
 
   // Uma consulta só: as regras ativas dizem o que falta gerar e se existe
   // alguma com confirmação automática.
@@ -138,6 +160,8 @@ export async function ensureRecurringOccurrences(userId: string, until: Date) {
       data: { paid: true },
     });
   }
+
+  ensureCache.set(userId, { until: target.getTime(), checkedAt: Date.now() });
 }
 
 async function findOwnedRule(userId: string, ruleId: string) {
@@ -158,6 +182,7 @@ export async function createRule(
 ) {
   const payment = await resolvePayment(userId, body);
   const startDate = toApiDate(body.startDate);
+  invalidateRecurringCache(userId);
 
   return prisma.$transaction(async (tx) => {
     const rule = await tx.recurringRule.create({
@@ -244,6 +269,7 @@ export async function findAllByUserId(userId: string) {
 /** Edita a regra inteira: ocorrências não pagas e não destacadas são refeitas. */
 export async function updateRule(userId: string, ruleId: string, body: RuleBody) {
   const rule = await findOwnedRule(userId, ruleId);
+  invalidateRecurringCache(userId);
   const payment = await resolvePayment(userId, body);
   const startDate = toApiDate(body.startDate);
 
@@ -274,6 +300,7 @@ export async function updateRule(userId: string, ruleId: string, body: RuleBody)
 /** Exclui a regra e as ocorrências não pagas. As pagas ficam no histórico. */
 export async function removeRule(userId: string, ruleId: string) {
   const rule = await findOwnedRule(userId, ruleId);
+  invalidateRecurringCache(userId);
 
   await prisma.$transaction([
     prisma.transaction.deleteMany({ where: { recurringRuleId: rule.id, paid: false } }),
@@ -284,6 +311,7 @@ export async function removeRule(userId: string, ruleId: string) {
 /** Encerra a partir de uma data, pausa ou reativa. */
 export async function endRule(userId: string, ruleId: string, body: EndRuleBody) {
   const rule = await findOwnedRule(userId, ruleId);
+  invalidateRecurringCache(userId);
 
   if (body.action === 'pause') {
     await prisma.recurringRule.update({ where: { id: rule.id }, data: { active: false } });
@@ -352,6 +380,7 @@ export async function updateOccurrence(
 ) {
   const payment = await resolvePayment(userId, body, current.cardId);
   const newDate = toApiDate(body.date);
+  invalidateRecurringCache(userId);
   const fields = {
     type: body.type,
     name: body.name,
@@ -485,6 +514,7 @@ export async function updateOccurrence(
  * - all: a regra e todas as ocorrências não pagas (as pagas ficam).
  */
 export async function removeOccurrence(current: Transaction, scope: Scope) {
+  invalidateRecurringCache(current.userId);
   const rule = current.recurringRuleId
     ? await prisma.recurringRule.findUnique({ where: { id: current.recurringRuleId } })
     : null;

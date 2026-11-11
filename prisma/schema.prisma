@@ -2,7 +2,10 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // Relações (include) numa consulta só, com JOIN, em vez de uma consulta por
+  // relação: com o banco longe, cada ida e volta conta.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
