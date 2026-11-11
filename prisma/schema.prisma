@@ -21,6 +21,7 @@ model User {
   bankAccounts BankAccount[]
   categories   Category[]
   transactions Transaction[]
+  cards        Card[]
 
   @@map("users")
 }
@@ -43,6 +44,7 @@ model BankAccount {
 
   transactions      Transaction[] @relation("TransactionAccount")
   incomingTransfers Transaction[] @relation("TransferDestination")
+  cards             Card[]
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -71,22 +73,94 @@ model Category {
   @@map("categories")
 }
 
+enum PaymentMethod {
+  ACCOUNT
+  CREDIT_CARD
+  DEBIT_CARD
+  PIX
+  CASH
+
+  @@map("payment_method")
+}
+
 model Transaction {
-  id             String          @id @default(uuid()) @db.Uuid
-  userId         String          @map("user_id") @db.Uuid
-  bankAccountId  String          @map("bank_account_id") @db.Uuid
-  toBankAccountId String?        @map("to_bank_account_id") @db.Uuid
-  categoryId     String?         @map("category_id") @db.Uuid
-  name           String
-  value          Float
-  date           DateTime
-  type           TransactionType
-  paid           Boolean         @default(true)
+  id                 String          @id @default(uuid()) @db.Uuid
+  userId             String          @map("user_id") @db.Uuid
+  // Opcional: compra no crédito não sai de nenhuma conta na hora.
+  bankAccountId      String?         @map("bank_account_id") @db.Uuid
+  toBankAccountId    String?         @map("to_bank_account_id") @db.Uuid
+  categoryId         String?         @map("category_id") @db.Uuid
+  cardId             String?         @map("card_id") @db.Uuid
+  name               String
+  value              Float
+  date               DateTime
+  type               TransactionType
+  paid               Boolean         @default(true)
+  paymentMethod      PaymentMethod   @default(ACCOUNT) @map("payment_method")
+  // Parcelamento: as N parcelas compartilham o mesmo grupo.
+  installmentGroupId String?         @map("installment_group_id") @db.Uuid
+  installmentNumber  Int?            @map("installment_number")
+  installmentsTotal  Int?            @map("installments_total")
+  notes              String?
+  createdAt          DateTime        @default(now()) @map("created_at")
 
   user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bankAccount   BankAccount  @relation("TransactionAccount", fields: [bankAccountId], references: [id], onDelete: Cascade)
+  bankAccount   BankAccount? @relation("TransactionAccount", fields: [bankAccountId], references: [id], onDelete: Cascade)
   toBankAccount BankAccount? @relation("TransferDestination", fields: [toBankAccountId], references: [id], onDelete: Cascade)
   category      Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  card          Card?        @relation(fields: [cardId], references: [id], onDelete: Cascade)
 
+  @@index([userId, date])
+  @@index([installmentGroupId])
+  @@index([cardId])
   @@map("transactions")
+}
+
+enum CardBrand {
+  VISA
+  MASTERCARD
+  ELO
+  AMEX
+  HIPERCARD
+  DINERS
+  DISCOVER
+  JCB
+  OTHER
+
+  @@map("card_brand")
+}
+
+enum CardKind {
+  CREDIT
+  DEBIT
+
+  @@map("card_kind")
+}
+
+model Card {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  // Conta vinculada: o débito sai dela e a fatura do crédito é paga por ela.
+  bankAccountId String?   @map("bank_account_id") @db.Uuid
+  name          String
+  holderName    String    @map("holder_name")
+  // Nunca guardamos o número completo nem o CVV — só os 4 últimos dígitos.
+  lastDigits    String    @map("last_digits") @db.VarChar(4)
+  brand         CardBrand
+  kind          CardKind
+  color         String
+  expMonth      Int       @map("exp_month")
+  expYear       Int       @map("exp_year")
+  creditLimit   Float?    @map("credit_limit")
+  closingDay    Int?      @map("closing_day")
+  dueDay        Int?      @map("due_day")
+  archived      Boolean   @default(false)
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankAccount  BankAccount?  @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  transactions Transaction[]
+
+  @@index([userId])
+  @@map("cards")
 }
