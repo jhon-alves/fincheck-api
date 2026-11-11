@@ -10,11 +10,19 @@ import { bankAccountsRoutes } from './modules/bank-accounts/bank-accounts.routes
 import { categoriesRoutes } from './modules/categories/categories.routes';
 import { transactionsRoutes } from './modules/transactions/transactions.routes';
 import { transfersRoutes } from './modules/transfers/transfers.routes';
+import { cardsRoutes } from './modules/cards/cards.routes';
+import { dashboardRoutes } from './modules/dashboard/dashboard.routes';
+import { recurringRoutes } from './modules/recurring/recurring.routes';
 
 export async function buildServer() {
   const app = Fastify({ logger: true });
 
-  await app.register(cors, { origin: '*' });
+  // O @fastify/cors v11 só libera GET, HEAD e POST por padrão: sem a lista
+  // explícita, o navegador barra PUT e DELETE no preflight.
+  await app.register(cors, {
+    origin: '*',
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  });
   await registerAuth(app);
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
@@ -62,6 +70,9 @@ export async function buildServer() {
   await app.register(categoriesRoutes, { prefix: '/categories' });
   await app.register(transactionsRoutes, { prefix: '/transactions' });
   await app.register(transfersRoutes, { prefix: '/transfers' });
+  await app.register(cardsRoutes, { prefix: '/cards' });
+  await app.register(dashboardRoutes, { prefix: '/dashboard' });
+  await app.register(recurringRoutes, { prefix: '/recurring-rules' });
 
   return app;
 }

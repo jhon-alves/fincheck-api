@@ -11,16 +11,19 @@
     "build": "tsc",
     "start": "node --env-file=.env dist/main.js",
     "lint": "eslint .",
+    "test": "tsx --test \"src/**/*.test.ts\"",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:migrate:dev": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "seed": "tsx --env-file=.env prisma/seed.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",
     "@fastify/jwt": "^10.1.0",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",
+    "date-fns": "^4.4.0",
     "fastify": "^5.9.0",
     "zod": "^4.4.3"
   },
@@ -33,5 +36,15 @@
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.62.0"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "esbuild@0.28.2": true,
+    "prisma@6.19.3": true
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.2",
+    "minimatch": "^11.0.8"
   }
 }
