@@ -16,12 +16,17 @@ export async function findAllByUserId(userId: string) {
     where: { userId },
     include: {
       // Movimentos em que esta conta é a origem (receitas, despesas e
-      // transferências de saída).
+      // transferências de saída). Só entra o que já foi pago/recebido:
+      // previstos (recorrentes, parcelas futuras) não mexem no saldo atual.
+      // Compras no crédito também ficam de fora: o saldo só muda quando a
+      // fatura é paga.
       transactions: {
+        where: { paid: true, paymentMethod: { not: 'CREDIT_CARD' } },
         select: { value: true, type: true },
       },
       // Transferências recebidas (esta conta é o destino).
       incomingTransfers: {
+        where: { paid: true },
         select: { value: true },
       },
     },
