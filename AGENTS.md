@@ -24,6 +24,13 @@ Toda a interface e as mensagens de erro são em **português do Brasil**. Valore
 - [Zod 4](https://zod.dev/) para validar body, query e params
 - `bcryptjs`, `date-fns`, TypeScript, ESLint (`typescript-eslint`), `tsx`
 
+O `package.json` tem `overrides` para corrigir falhas de segurança em dependências indiretas:
+
+- `deepmerge-ts` `^8.0.2`: o `@prisma/config` do Prisma 6 ainda pede a 7 (GHSA-ggr8-5vv4-36mx). O Prisma 7 já usa a 8.
+- `minimatch` `^11.0.8`: o ESLint e o `typescript-eslint` ainda pedem a 10 (GHSA-g3hv-75wg-m249).
+
+Quando essas dependências passarem a pedir as versões corrigidas, os overrides podem sair. Confira com `npm audit`.
+
 ## Comandos
 
 ```bash
