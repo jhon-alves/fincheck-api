@@ -11,6 +11,7 @@ import { categoriesRoutes } from './modules/categories/categories.routes';
 import { transactionsRoutes } from './modules/transactions/transactions.routes';
 import { transfersRoutes } from './modules/transfers/transfers.routes';
 import { cardsRoutes } from './modules/cards/cards.routes';
+import { recurringRoutes } from './modules/recurring/recurring.routes';
 
 export async function buildServer() {
   const app = Fastify({ logger: true });
@@ -69,6 +70,7 @@ export async function buildServer() {
   await app.register(transactionsRoutes, { prefix: '/transactions' });
   await app.register(transfersRoutes, { prefix: '/transfers' });
   await app.register(cardsRoutes, { prefix: '/cards' });
+  await app.register(recurringRoutes, { prefix: '/recurring-rules' });
 
   return app;
 }
