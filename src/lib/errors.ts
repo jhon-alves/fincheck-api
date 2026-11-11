@@ -8,8 +8,14 @@ export class HttpError extends Error {
   }
 }
 
+export const badRequest = (message = 'Requisição inválida') =>
+  new HttpError(400, message);
+
 export const unauthorized = (message = 'Não autorizado') =>
   new HttpError(401, message);
+
+export const forbidden = (message = 'Acesso negado') =>
+  new HttpError(403, message);
 
 export const notFound = (message = 'Recurso não encontrado') =>
   new HttpError(404, message);
