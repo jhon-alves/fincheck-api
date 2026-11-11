@@ -14,7 +14,12 @@ import { transfersRoutes } from './modules/transfers/transfers.routes';
 export async function buildServer() {
   const app = Fastify({ logger: true });
 
-  await app.register(cors, { origin: '*' });
+  // O @fastify/cors v11 só libera GET, HEAD e POST por padrão: sem a lista
+  // explícita, o navegador barra PUT e DELETE no preflight.
+  await app.register(cors, {
+    origin: '*',
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  });
   await registerAuth(app);
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
