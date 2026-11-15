@@ -79,10 +79,13 @@ export async function getSummary(userId: string, filters: SummaryFilters) {
 
   const historyStart = startOfMonthUTC(year, month - (HISTORY_MONTHS - 1));
   const monthEnd = startOfNextMonthUTC(year, month);
+  const yearStart = startOfMonthUTC(year, 0);
+  const yearEnd = startOfNextMonthUTC(year, 11);
 
-  await ensureRecurringOccurrences(userId, monthEnd);
+  // Até o fim do ano: o resumo anual inclui os recorrentes até dezembro.
+  await ensureRecurringOccurrences(userId, yearEnd);
 
-  const [accounts, cards, categories, periodTransactions, upcoming, recent, fixed] =
+  const [accounts, cards, categories, periodTransactions, upcoming, recent, fixed, yearSums] =
     await Promise.all([
       bankAccountsService.findAllByUserId(userId),
       cardsService.findAllByUserId(userId, {}),
@@ -135,7 +138,23 @@ export async function getSummary(userId: string, filters: SummaryFilters) {
         include: transactionInclude,
         orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
       }),
+      // Resumo do ano (jan–dez), com a mesma regra dos KPIs do mês: tudo que
+      // tem data no período, pago ou previsto, sem transferências.
+      prisma.transaction.groupBy({
+        by: ['type'],
+        where: {
+          userId,
+          type: { in: ['INCOME', 'EXPENSE'] },
+          date: { gte: yearStart, lt: yearEnd },
+        },
+        _sum: { value: true },
+      }),
     ]);
+
+  const yearSum = (type: 'INCOME' | 'EXPENSE') =>
+    roundMoney(yearSums.find((sum) => sum.type === type)?._sum.value ?? 0);
+  const yearIncome = yearSum('INCOME');
+  const yearExpense = yearSum('EXPENSE');
 
   // KPIs do mês e do mês anterior (para a variação %).
   const previousMonthDate = startOfMonthUTC(year, month - 1);
@@ -272,6 +291,12 @@ export async function getSummary(userId: string, filters: SummaryFilters) {
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
   return {
+    yearTotals: {
+      year,
+      income: yearIncome,
+      expense: yearExpense,
+      balance: roundMoney(yearIncome - yearExpense),
+    },
     totalBalance: roundMoney(
       accounts.reduce((total, account) => total + account.currentBalance, 0),
     ),

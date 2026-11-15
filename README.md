@@ -202,6 +202,7 @@ A recorrência é uma **regra** (`RecurringRule`, o molde) e as ocorrências vir
 
 `GET /dashboard/summary?month&year&today=YYYY-MM-DD` devolve:
 
+- `yearTotals` — `{ year, income, expense, balance }` de janeiro a dezembro do ano pedido, com a mesma regra dos KPIs do mês (pagos e previstos, sem transferências);
 - `totalBalance` — soma do `currentBalance` das contas;
 - `current` e `previous` — `{ income, expense, savings, openInvoices }` do mês e do mês anterior (`openInvoices` = compras no crédito pendentes no mês);
 - `expensesByCategory` — top 5 categorias de saída + "Outros";
