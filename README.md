@@ -99,7 +99,7 @@ O CORS libera qualquer origem e os métodos `GET, HEAD, POST, PUT, PATCH, DELETE
 - As demais rotas exigem o header `Authorization: Bearer <accessToken>`.
 - O token é um JWT com payload `{ sub: <userId> }` e expiração de `7d`.
 - Senhas são armazenadas com hash `bcrypt` (12 rounds).
-- No signup, o usuário já é criado com um conjunto padrão de **12 categorias** (receitas e despesas).
+- No signup, o usuário já é criado com um conjunto padrão de **13 categorias** (receitas e despesas).
 
 ## Endpoints
 
@@ -188,7 +188,7 @@ A recorrência é uma **regra** (`RecurringRule`, o molde) e as ocorrências vir
 
 ### Categorias
 
-- **Padrão** (`isDefault: true`): as 12 criadas no signup (`src/modules/categories/default-categories.ts`). Não podem ser editadas nem excluídas: `PUT`/`DELETE` respondem `403` com "Categorias padrão não podem ser alteradas".
+- **Padrão** (`isDefault: true`): as 13 criadas no signup (`src/modules/categories/default-categories.ts`). Não podem ser editadas nem excluídas: `PUT`/`DELETE` respondem `403` com "Categorias padrão não podem ser alteradas".
 - **Personalizadas**: nome único por usuário e tipo, sem diferenciar maiúsculas (`409` se repetir). `icon` e `color` são chaves do front (ex.: `paw-print`, `violet`). O tipo não muda se a categoria já tem lançamentos.
 - **Excluir com lançamentos**: `DELETE /categories/:id?moveToCategoryId=<outra do mesmo tipo>` move os lançamentos e exclui numa `prisma.$transaction`. Sem o destino, responde `400` informando quantos lançamentos existem.
 

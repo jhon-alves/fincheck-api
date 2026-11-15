@@ -77,7 +77,7 @@ src/
   plugins/auth.ts          # @fastify/jwt + preHandler que preenche request.userId
   @types/fastify.d.ts      # augmentations (request.userId, app.authenticate)
   modules/
-    auth/                  # signin, signup (cria as 12 categorias padrão)
+    auth/                  # signin, signup (cria as 13 categorias padrão)
     users/                 # GET /users/me
     bank-accounts/         # CRUD + saldo atual calculado
     categories/            # CRUD, padrão x personalizadas, mover lançamentos ao excluir
@@ -112,7 +112,7 @@ Regras gerais:
 `User` 1—N `BankAccount`, `Category`, `Card`, `Transaction`, `RecurringRule` (tudo com `onDelete: Cascade` a partir do usuário).
 
 - **Transaction**: `type` `INCOME | EXPENSE | TRANSFER`; `paymentMethod` `ACCOUNT | PIX | CASH | CREDIT_CARD | DEBIT_CARD`; `bankAccountId` é nulo em compras no crédito; `toBankAccountId` só em transferências; campos de parcela (`installmentGroupId`, `installmentNumber`, `installmentsTotal`); campos de recorrência (`recurringRuleId`, `occurrenceDate`, `isDetached`) com `@@unique([recurringRuleId, occurrenceDate])`.
-- **Category**: `isDefault`, `color` opcional e `@@unique([userId, type, name])`. Cada usuário tem a própria cópia das 12 categorias padrão. Por isso o banco tem uma linha "Alimentação" por usuário, e isso não é duplicação.
+- **Category**: `isDefault`, `color` opcional e `@@unique([userId, type, name])`. Cada usuário tem a própria cópia das 13 categorias padrão. Por isso o banco tem uma linha "Alimentação" por usuário, e isso não é duplicação.
 - **Card**: guarda só `lastDigits` e `brand`. Crédito tem `creditLimit`, `closingDay` e `dueDay`; débito aponta para a conta em `bankAccountId`.
 - **RecurringRule**: o molde da recorrência (`frequency`, `dayRule`, `dayOfMonth`, `businessDayN`, `startDate`, `endDate`, `maxOccurrences`, `autoConfirm`, `active`, `generatedUntil`, `skippedDates`).
 
