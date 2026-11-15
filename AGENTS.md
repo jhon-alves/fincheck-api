@@ -140,6 +140,7 @@ Valores monetários são `Float` em reais. Ao dividir (parcelas), trunque os cen
 - A regra gera `Transaction`s reais numa **janela móvel de 12 meses**. `ensureRecurringOccurrences(userId, until)` é idempotente (`createMany` + `skipDuplicates` na chave única) e roda antes de `GET /transactions`, `/transactions/calendar` e `/dashboard/summary`.
 - Há um cache em memória por usuário (60 s) para não refazer essa verificação a cada request. **Toda função que cria, edita, encerra ou exclui regras ou ocorrências precisa chamar `invalidateRecurringCache(userId)`.**
 - Ocorrências nascem pendentes (`paid: false`). `autoConfirm` marca como pagas quando a data chega; senão, `PATCH /transactions/:id/confirm`.
+- No cartão de crédito, "pago" quer dizer fatura paga, então o `autoConfirm` é ignorado (salvo como `false` e nunca aplicado a cobranças `CREDIT_CARD`).
 - Escopo: `one` destaca a ocorrência (`isDetached`); `following` encerra a regra na véspera e cria outra; `all` atualiza a regra e refaz as não pagas e não destacadas. O que já foi pago nunca é reescrito.
 - Excluir só uma ocorrência grava a data em `skippedDates` (não há soft delete).
 - `BUSINESS_DAY` = N-ésimo dia útil (segunda a sexta, sem feriados nacionais, Carnaval, Sexta-feira Santa e Corpus Christi), em `recurring/business-days.ts`.

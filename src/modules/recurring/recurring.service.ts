@@ -1,4 +1,4 @@
-import type { Prisma, RecurringRule, Transaction } from '@prisma/client';
+import type { PaymentMethod, Prisma, RecurringRule, Transaction } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { notFound } from '../../lib/errors';
 import {
@@ -44,8 +44,18 @@ export function defaultWindowEnd(today = todayApiDate()) {
 
 const laterOf = (a: Date, b: Date | null | undefined) => (b && b > a ? b : a);
 
+/**
+ * No crédito, "pago" quer dizer fatura paga: a data da cobrança chegar não
+ * paga nada. Por isso a confirmação automática não vale para cartão de crédito.
+ */
+const canAutoConfirm = (paymentMethod: PaymentMethod) => paymentMethod !== 'CREDIT_CARD';
+
 /** Campos de agenda a partir do corpo `recurrence`. */
-function scheduleFields(recurrence: RecurrenceBody, startDate: Date) {
+function scheduleFields(
+  recurrence: RecurrenceBody,
+  startDate: Date,
+  paymentMethod: PaymentMethod,
+) {
   const isBusinessDay = recurrence.dayRule === 'BUSINESS_DAY';
 
   return {
@@ -55,7 +65,7 @@ function scheduleFields(recurrence: RecurrenceBody, startDate: Date) {
     businessDayN: isBusinessDay ? (recurrence.businessDayN ?? 1) : null,
     endDate: recurrence.endDate ? toApiDate(recurrence.endDate) : null,
     maxOccurrences: recurrence.maxOccurrences ?? null,
-    autoConfirm: recurrence.autoConfirm,
+    autoConfirm: recurrence.autoConfirm && canAutoConfirm(paymentMethod),
   };
 }
 
@@ -94,8 +104,8 @@ async function generateForRule(db: Db, rule: RecurringRule, until: Date) {
           occurrenceDate: date,
           recurringRuleId: rule.id,
           // Previstas nascem pendentes e não mexem no saldo. Com autoConfirm,
-          // as que já venceram nascem confirmadas.
-          paid: rule.autoConfirm && date <= today,
+          // as que já venceram nascem confirmadas (menos no crédito).
+          paid: rule.autoConfirm && canAutoConfirm(rule.paymentMethod) && date <= today,
         })),
         skipDuplicates: true,
       });
@@ -155,6 +165,7 @@ export async function ensureRecurringOccurrences(userId: string, until: Date) {
         paid: false,
         isDetached: false,
         date: { lt: startOfDayUTC(addDaysToApiDate(todayApiDate(), 1)) },
+        paymentMethod: { not: 'CREDIT_CARD' },
         recurringRule: { is: { autoConfirm: true } },
       },
       data: { paid: true },
@@ -195,7 +206,7 @@ export async function createRule(
         notes: body.notes || null,
         startDate,
         ...payment,
-        ...scheduleFields(body.recurrence, startDate),
+        ...scheduleFields(body.recurrence, startDate, payment.paymentMethod),
       },
     });
 
@@ -284,7 +295,7 @@ export async function updateRule(userId: string, ruleId: string, body: RuleBody)
         notes: body.notes || null,
         startDate,
         ...payment,
-        ...scheduleFields(body.recurrence, startDate),
+        ...scheduleFields(body.recurrence, startDate, payment.paymentMethod),
       },
     });
 
