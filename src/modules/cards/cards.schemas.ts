@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { dateOnlySchema } from '../../lib/dates';
 
 export const CARD_BRANDS = [
   'VISA',
@@ -115,3 +116,27 @@ export const cardFiltersSchema = z.object({
 export type CreateCardBody = z.infer<typeof createCardSchema>;
 export type UpdateCardBody = z.infer<typeof updateCardSchema>;
 export type CardFilters = z.infer<typeof cardFiltersSchema>;
+
+/**
+ * Qual fatura: `dueDate` (qualquer dia do mês do vencimento) ou `purchaseDate`
+ * (a fatura em que uma compra feita nesse dia cai).
+ */
+export const invoiceQuerySchema = z
+  .object({
+    dueDate: dateOnlySchema.optional(),
+    purchaseDate: dateOnlySchema.optional(),
+  })
+  .refine((query) => !!query.dueDate !== !!query.purchaseDate, {
+    message: 'Informe dueDate ou purchaseDate',
+  });
+
+export const payInvoiceSchema = z.strictObject({
+  dueDate: dateOnlySchema,
+  /** Conta de onde o pagamento sai. */
+  bankAccountId: z.uuid('Escolha a conta que paga a fatura'),
+  /** Dia em que a fatura foi paga. */
+  date: dateOnlySchema,
+});
+
+export type InvoiceQuery = z.infer<typeof invoiceQuerySchema>;
+export type PayInvoiceBody = z.infer<typeof payInvoiceSchema>;

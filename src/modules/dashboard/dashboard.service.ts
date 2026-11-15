@@ -1,3 +1,4 @@
+import type { TransactionType } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import {
   addDaysToApiDate,
@@ -29,7 +30,7 @@ interface MonthTotals {
 type SummaryTransaction = {
   date: Date;
   value: number;
-  type: 'INCOME' | 'EXPENSE' | 'TRANSFER';
+  type: TransactionType;
   paid: boolean;
   paymentMethod: string;
   categoryId: string | null;

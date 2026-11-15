@@ -156,6 +156,8 @@ Valores monetários são `Float` em reais. Ao dividir (parcelas), trunque os cen
 
 - **Nunca** receba, salve ou registre em log o número completo do cartão nem o CVV. O schema é estrito (`z.strictObject`): campos desconhecidos como `number` ou `cvv` são recusados com `400`.
 - `usedLimit` = compras no crédito pendentes (inclui parcelas futuras, exclui recorrências futuras).
+- **Fatura** (`cards/invoice.ts`, `cards/invoices.service.ts`): a compra feita no dia do fechamento ou depois vai para a fatura seguinte (`dueDateForPurchase`, com testes). Pagar a fatura cria um `INVOICE_PAYMENT` na conta e marca as compras como pagas com `invoicePaymentId`. O `paid` de compras no crédito só muda por esse fluxo: a API ignora `paid` ao criar/editar compra no crédito e recusa `PATCH /confirm` nelas.
+- `INVOICE_PAYMENT` entra no saldo da conta, mas fica fora de qualquer soma de entradas/saídas (dashboard, calendário, resumo do ano). Ao somar "saídas", filtre por `type: 'EXPENSE'`, nunca por "tudo que não é INCOME".
 
 ## Banco de dados e Supabase
 
@@ -177,6 +179,8 @@ npx prisma migrate diff \
 ```
 
 Revise o SQL (dados existentes, valores padrão, índices únicos) e aplique com `npm run prisma:migrate`. Nunca edite uma migration que já foi aplicada; crie outra.
+
+> ⚠️ Com `--from-migrations` o shadow falha (P3006): a migration `20261111120000_enable_row_level_security` liga o RLS em `_prisma_migrations`, que não existe no banco shadow. Gere o diff contra um banco local que já tenha todas as migrations aplicadas: `npx prisma migrate diff --from-url "postgresql://postgres@127.0.0.1:54329/fincheck_dev" --to-schema-datamodel prisma/schema.prisma --script`. O mesmo vale para `prisma migrate dev`.
 
 ### Segurança do banco (RLS)
 

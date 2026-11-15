@@ -120,6 +120,8 @@ O CORS libera qualquer origem e os métodos `GET, HEAD, POST, PUT, PATCH, DELETE
 | `POST` | `/cards` | ✅ | Cria cartão (`201`) |
 | `PUT` | `/cards/:cardId` | ✅ | Atualiza cartão (inclui `archived`) |
 | `DELETE` | `/cards/:cardId` | ✅ | Remove cartão **e os lançamentos feitos com ele** (`204`) |
+| `GET` | `/cards/:cardId/invoice?dueDate=` ou `?purchaseDate=` | ✅ | Fatura (pelo mês do vencimento ou pela data de uma compra): total, pendente, pago e pagamentos |
+| `POST` | `/cards/:cardId/invoice/pay` | ✅ | Paga a fatura: `{ dueDate, bankAccountId, date }` (`201`, devolve o pagamento) |
 | `POST` | `/transactions` | ✅ | Cria transação (`201`). Parcelada devolve a lista de parcelas |
 | `GET` | `/transactions` | ✅ | Lista transações (filtros abaixo), ordenadas da mais recente |
 | `GET` | `/transactions/calendar?month&year` | ✅ | Agregado por dia: `[{ date, income, expense, count, hasInstallments, hasRecurring }]` |
@@ -197,6 +199,15 @@ A recorrência é uma **regra** (`RecurringRule`, o molde) e as ocorrências vir
 - Só `lastDigits` e `brand` vão para a API: **o número completo e o CVV nunca são enviados nem salvos**. O body é estrito — campos desconhecidos (ex.: `number`, `cvv`) são recusados com `400`.
 - Crédito exige `creditLimit`, `closingDay` e `dueDay` (1–31). Débito exige `bankAccountId` (a conta de onde o dinheiro sai) e ignora limite e dias.
 - `usedLimit` = compras no crédito ainda pendentes (inclui parcelas futuras).
+
+### Pagamento de fatura
+
+- Compras no crédito nascem **pendentes** e não mexem no saldo de nenhuma conta. O `paid` delas não é alterado à mão (`PATCH /confirm` responde `400`).
+- `POST /cards/:cardId/invoice/pay` reúne as compras pendentes da fatura (do fechamento anterior até o dia antes do fechamento), cria um lançamento `INVOICE_PAYMENT` com o total na conta escolhida e marca as compras como pagas, ligadas ao pagamento (`invoicePaymentId`). Tudo numa transação.
+- O `INVOICE_PAYMENT` **tira o valor da conta** (entra no `currentBalance`), mas **não conta como saída** no dashboard, no calendário nem no resumo do ano: as compras já contam.
+- Excluir o pagamento (`DELETE /transactions/:id`) desfaz: as compras voltam para pendente e o valor volta para a conta. Ele não pode ser editado.
+- Uma compra já paga numa fatura não pode ter valor, data ou forma de pagamento alterados, nem ser excluída, até o pagamento ser excluído.
+- Excluir a conta que pagou também desfaz os pagamentos feitos por ela.
 
 ### Dashboard
 

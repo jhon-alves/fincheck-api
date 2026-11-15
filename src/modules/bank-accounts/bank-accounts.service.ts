@@ -19,7 +19,7 @@ export async function findAllByUserId(userId: string) {
       // transferências de saída). Só entra o que já foi pago/recebido:
       // previstos (recorrentes, parcelas futuras) não mexem no saldo atual.
       // Compras no crédito também ficam de fora: o saldo só muda quando a
-      // fatura é paga.
+      // fatura é paga, pelo lançamento INVOICE_PAYMENT (que sai desta conta).
       transactions: {
         where: { paid: true, paymentMethod: { not: 'CREDIT_CARD' } },
         select: { value: true, type: true },
@@ -69,5 +69,13 @@ export async function update(
 export async function remove(userId: string, bankAccountId: string) {
   await validateBankAccountOwnership(userId, bankAccountId);
 
-  await prisma.bankAccount.delete({ where: { id: bankAccountId } });
+  // Os pagamentos de fatura feitos por esta conta somem junto com ela (cascade):
+  // as compras que eles pagaram voltam a ficar pendentes.
+  await prisma.$transaction([
+    prisma.transaction.updateMany({
+      where: { userId, invoicePayment: { is: { bankAccountId } } },
+      data: { paid: false, invoicePaymentId: null },
+    }),
+    prisma.bankAccount.delete({ where: { id: bankAccountId } }),
+  ]);
 }
