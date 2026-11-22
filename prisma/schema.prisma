@@ -60,6 +60,9 @@ enum TransactionType {
   INCOME
   EXPENSE
   TRANSFER
+  /// Pagamento de fatura do cartão de crédito: tira o valor da conta, mas não
+  /// conta como saída nos totais (as compras da fatura já contam).
+  INVOICE_PAYMENT
 
   @@map("transaction_type")
 }
@@ -120,19 +123,26 @@ model Transaction {
   occurrenceDate     DateTime?       @map("occurrence_date")
   // Editada individualmente (escopo "só esta"): a regra não sobrescreve mais.
   isDetached         Boolean         @default(false) @map("is_detached")
+  // Compra no crédito paga numa fatura: aponta para o pagamento (INVOICE_PAYMENT).
+  invoicePaymentId   String?         @map("invoice_payment_id") @db.Uuid
+  // No pagamento de fatura: o vencimento da fatura que ele pagou.
+  invoiceDueDate     DateTime?       @map("invoice_due_date")
   createdAt          DateTime        @default(now()) @map("created_at")
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recurringRule RecurringRule? @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
-  bankAccount   BankAccount?   @relation("TransactionAccount", fields: [bankAccountId], references: [id], onDelete: Cascade)
-  toBankAccount BankAccount?   @relation("TransferDestination", fields: [toBankAccountId], references: [id], onDelete: Cascade)
-  category      Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  card          Card?          @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recurringRule    RecurringRule? @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
+  bankAccount      BankAccount?   @relation("TransactionAccount", fields: [bankAccountId], references: [id], onDelete: Cascade)
+  toBankAccount    BankAccount?   @relation("TransferDestination", fields: [toBankAccountId], references: [id], onDelete: Cascade)
+  category         Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  card             Card?          @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  invoicePayment   Transaction?   @relation("InvoicePayment", fields: [invoicePaymentId], references: [id], onDelete: SetNull)
+  invoicePurchases Transaction[]  @relation("InvoicePayment")
 
   @@unique([recurringRuleId, occurrenceDate])
   @@index([userId, date])
   @@index([installmentGroupId])
   @@index([cardId])
+  @@index([invoicePaymentId])
   @@map("transactions")
 }
 

@@ -77,7 +77,7 @@ src/
   plugins/auth.ts          # @fastify/jwt + preHandler que preenche request.userId
   @types/fastify.d.ts      # augmentations (request.userId, app.authenticate)
   modules/
-    auth/                  # signin, signup (cria as 12 categorias padrão)
+    auth/                  # signin, signup (cria as 13 categorias padrão)
     users/                 # GET /users/me
     bank-accounts/         # CRUD + saldo atual calculado
     categories/            # CRUD, padrão x personalizadas, mover lançamentos ao excluir
@@ -112,7 +112,7 @@ Regras gerais:
 `User` 1—N `BankAccount`, `Category`, `Card`, `Transaction`, `RecurringRule` (tudo com `onDelete: Cascade` a partir do usuário).
 
 - **Transaction**: `type` `INCOME | EXPENSE | TRANSFER`; `paymentMethod` `ACCOUNT | PIX | CASH | CREDIT_CARD | DEBIT_CARD`; `bankAccountId` é nulo em compras no crédito; `toBankAccountId` só em transferências; campos de parcela (`installmentGroupId`, `installmentNumber`, `installmentsTotal`); campos de recorrência (`recurringRuleId`, `occurrenceDate`, `isDetached`) com `@@unique([recurringRuleId, occurrenceDate])`.
-- **Category**: `isDefault`, `color` opcional e `@@unique([userId, type, name])`. Cada usuário tem a própria cópia das 12 categorias padrão. Por isso o banco tem uma linha "Alimentação" por usuário, e isso não é duplicação.
+- **Category**: `isDefault`, `color` opcional e `@@unique([userId, type, name])`. Cada usuário tem a própria cópia das 13 categorias padrão. Por isso o banco tem uma linha "Alimentação" por usuário, e isso não é duplicação.
 - **Card**: guarda só `lastDigits` e `brand`. Crédito tem `creditLimit`, `closingDay` e `dueDay`; débito aponta para a conta em `bankAccountId`.
 - **RecurringRule**: o molde da recorrência (`frequency`, `dayRule`, `dayOfMonth`, `businessDayN`, `startDate`, `endDate`, `maxOccurrences`, `autoConfirm`, `active`, `generatedUntil`, `skippedDates`).
 
@@ -140,6 +140,7 @@ Valores monetários são `Float` em reais. Ao dividir (parcelas), trunque os cen
 - A regra gera `Transaction`s reais numa **janela móvel de 12 meses**. `ensureRecurringOccurrences(userId, until)` é idempotente (`createMany` + `skipDuplicates` na chave única) e roda antes de `GET /transactions`, `/transactions/calendar` e `/dashboard/summary`.
 - Há um cache em memória por usuário (60 s) para não refazer essa verificação a cada request. **Toda função que cria, edita, encerra ou exclui regras ou ocorrências precisa chamar `invalidateRecurringCache(userId)`.**
 - Ocorrências nascem pendentes (`paid: false`). `autoConfirm` marca como pagas quando a data chega; senão, `PATCH /transactions/:id/confirm`.
+- No cartão de crédito, "pago" quer dizer fatura paga, então o `autoConfirm` é ignorado (salvo como `false` e nunca aplicado a cobranças `CREDIT_CARD`).
 - Escopo: `one` destaca a ocorrência (`isDetached`); `following` encerra a regra na véspera e cria outra; `all` atualiza a regra e refaz as não pagas e não destacadas. O que já foi pago nunca é reescrito.
 - Excluir só uma ocorrência grava a data em `skippedDates` (não há soft delete).
 - `BUSINESS_DAY` = N-ésimo dia útil (segunda a sexta, sem feriados nacionais, Carnaval, Sexta-feira Santa e Corpus Christi), em `recurring/business-days.ts`.
@@ -155,6 +156,8 @@ Valores monetários são `Float` em reais. Ao dividir (parcelas), trunque os cen
 
 - **Nunca** receba, salve ou registre em log o número completo do cartão nem o CVV. O schema é estrito (`z.strictObject`): campos desconhecidos como `number` ou `cvv` são recusados com `400`.
 - `usedLimit` = compras no crédito pendentes (inclui parcelas futuras, exclui recorrências futuras).
+- **Fatura** (`cards/invoice.ts`, `cards/invoices.service.ts`): a compra feita no dia do fechamento ou depois vai para a fatura seguinte (`dueDateForPurchase`, com testes). Pagar a fatura cria um `INVOICE_PAYMENT` na conta e marca as compras como pagas com `invoicePaymentId`. O `paid` de compras no crédito só muda por esse fluxo: a API ignora `paid` ao criar/editar compra no crédito e recusa `PATCH /confirm` nelas.
+- `INVOICE_PAYMENT` entra no saldo da conta, mas fica fora de qualquer soma de entradas/saídas (dashboard, calendário, resumo do ano). Ao somar "saídas", filtre por `type: 'EXPENSE'`, nunca por "tudo que não é INCOME".
 
 ## Banco de dados e Supabase
 
@@ -176,6 +179,8 @@ npx prisma migrate diff \
 ```
 
 Revise o SQL (dados existentes, valores padrão, índices únicos) e aplique com `npm run prisma:migrate`. Nunca edite uma migration que já foi aplicada; crie outra.
+
+> ⚠️ Com `--from-migrations` o shadow falha (P3006): a migration `20261111120000_enable_row_level_security` liga o RLS em `_prisma_migrations`, que não existe no banco shadow. Gere o diff contra um banco local que já tenha todas as migrations aplicadas: `npx prisma migrate diff --from-url "postgresql://postgres@127.0.0.1:54329/fincheck_dev" --to-schema-datamodel prisma/schema.prisma --script`. O mesmo vale para `prisma migrate dev`.
 
 ### Segurança do banco (RLS)
 

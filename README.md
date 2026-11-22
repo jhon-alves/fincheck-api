@@ -99,7 +99,7 @@ O CORS libera qualquer origem e os métodos `GET, HEAD, POST, PUT, PATCH, DELETE
 - As demais rotas exigem o header `Authorization: Bearer <accessToken>`.
 - O token é um JWT com payload `{ sub: <userId> }` e expiração de `7d`.
 - Senhas são armazenadas com hash `bcrypt` (12 rounds).
-- No signup, o usuário já é criado com um conjunto padrão de **12 categorias** (receitas e despesas).
+- No signup, o usuário já é criado com um conjunto padrão de **13 categorias** (receitas e despesas).
 
 ## Endpoints
 
@@ -120,6 +120,8 @@ O CORS libera qualquer origem e os métodos `GET, HEAD, POST, PUT, PATCH, DELETE
 | `POST` | `/cards` | ✅ | Cria cartão (`201`) |
 | `PUT` | `/cards/:cardId` | ✅ | Atualiza cartão (inclui `archived`) |
 | `DELETE` | `/cards/:cardId` | ✅ | Remove cartão **e os lançamentos feitos com ele** (`204`) |
+| `GET` | `/cards/:cardId/invoice?dueDate=` ou `?purchaseDate=` | ✅ | Fatura (pelo mês do vencimento ou pela data de uma compra): total, pendente, pago e pagamentos |
+| `POST` | `/cards/:cardId/invoice/pay` | ✅ | Paga a fatura: `{ dueDate, bankAccountId, date }` (`201`, devolve o pagamento) |
 | `POST` | `/transactions` | ✅ | Cria transação (`201`). Parcelada devolve a lista de parcelas |
 | `GET` | `/transactions` | ✅ | Lista transações (filtros abaixo), ordenadas da mais recente |
 | `GET` | `/transactions/calendar?month&year` | ✅ | Agregado por dia: `[{ date, income, expense, count, hasInstallments, hasRecurring }]` |
@@ -181,14 +183,14 @@ A recorrência é uma **regra** (`RecurringRule`, o molde) e as ocorrências vir
 - **Criar:** `POST /transactions` com `recurrence: { frequency, dayRule, dayOfMonth?, businessDayN?, endDate?, maxOccurrences?, autoConfirm }` (ou `POST /recurring-rules`). `frequency`: `WEEKLY | MONTHLY | YEARLY`. `dayRule`: `FIXED_DAY` (31 vira o último dia do mês) ou `BUSINESS_DAY` (N-ésimo dia útil, só mensal). Não combina com parcelamento.
 - **Geração idempotente:** `ensureRecurringOccurrences(userId, until)` cria só o que falta (`createMany` com `skipDuplicates` sobre `@@unique([recurringRuleId, occurrenceDate])`, e no máximo uma ocorrência por período). Roda ao criar/editar a regra e no início de `GET /transactions`, `/transactions/calendar` e `/dashboard/summary` quando o período pedido passa da janela já gerada (`generatedUntil`). O resultado fica em cache por 60 s por usuário, e qualquer alteração em regras ou ocorrências limpa esse cache.
 - **Dia útil:** segunda a sexta, sem os feriados nacionais fixos e sem Carnaval, Sexta-feira Santa e Corpus Christi (`src/modules/recurring/business-days.ts`, com testes).
-- **Status:** as ocorrências nascem previstas (`paid: false`) e **não mexem no saldo**. Confirmação com `PATCH /transactions/:id/confirm` ou automática (`autoConfirm`) quando a data chega. O `currentBalance` das contas só considera lançamentos pagos.
+- **Status:** as ocorrências nascem previstas (`paid: false`) e **não mexem no saldo**. Confirmação com `PATCH /transactions/:id/confirm` ou automática (`autoConfirm`) quando a data chega. No cartão de crédito o `autoConfirm` é ignorado: a cobrança só fica paga quando você marca a fatura como paga. O `currentBalance` das contas só considera lançamentos pagos.
 - **Escopo** em `PUT`/`DELETE /transactions/:id?scope=`: `one` edita só a ocorrência e a marca como destacada (`isDetached`); `following` encerra a regra na véspera e cria outra a partir daquela ocorrência; `all` atualiza a regra e refaz as não pagas e não destacadas. O histórico já pago nunca é reescrito.
 - **Excluir uma ocorrência (`scope=one`):** a data vai para `skippedDates` da regra, que não a recria. Escolhemos essa lista de exceções em vez de soft delete para não precisar filtrar `deletedAt` em todas as consultas.
 - **Cartão de crédito:** assinaturas futuras não consomem o limite; só passam a contar quando a data chega.
 
 ### Categorias
 
-- **Padrão** (`isDefault: true`): as 12 criadas no signup (`src/modules/categories/default-categories.ts`). Não podem ser editadas nem excluídas: `PUT`/`DELETE` respondem `403` com "Categorias padrão não podem ser alteradas".
+- **Padrão** (`isDefault: true`): as 13 criadas no signup (`src/modules/categories/default-categories.ts`). Não podem ser editadas nem excluídas: `PUT`/`DELETE` respondem `403` com "Categorias padrão não podem ser alteradas".
 - **Personalizadas**: nome único por usuário e tipo, sem diferenciar maiúsculas (`409` se repetir). `icon` e `color` são chaves do front (ex.: `paw-print`, `violet`). O tipo não muda se a categoria já tem lançamentos.
 - **Excluir com lançamentos**: `DELETE /categories/:id?moveToCategoryId=<outra do mesmo tipo>` move os lançamentos e exclui numa `prisma.$transaction`. Sem o destino, responde `400` informando quantos lançamentos existem.
 
@@ -198,10 +200,20 @@ A recorrência é uma **regra** (`RecurringRule`, o molde) e as ocorrências vir
 - Crédito exige `creditLimit`, `closingDay` e `dueDay` (1–31). Débito exige `bankAccountId` (a conta de onde o dinheiro sai) e ignora limite e dias.
 - `usedLimit` = compras no crédito ainda pendentes (inclui parcelas futuras).
 
+### Pagamento de fatura
+
+- Compras no crédito nascem **pendentes** e não mexem no saldo de nenhuma conta. O `paid` delas não é alterado à mão (`PATCH /confirm` responde `400`).
+- `POST /cards/:cardId/invoice/pay` reúne as compras pendentes da fatura (do fechamento anterior até o dia antes do fechamento), cria um lançamento `INVOICE_PAYMENT` com o total na conta escolhida e marca as compras como pagas, ligadas ao pagamento (`invoicePaymentId`). Tudo numa transação.
+- O `INVOICE_PAYMENT` **tira o valor da conta** (entra no `currentBalance`), mas **não conta como saída** no dashboard, no calendário nem no resumo do ano: as compras já contam.
+- Excluir o pagamento (`DELETE /transactions/:id`) desfaz: as compras voltam para pendente e o valor volta para a conta. Ele não pode ser editado.
+- Uma compra já paga numa fatura não pode ter valor, data ou forma de pagamento alterados, nem ser excluída, até o pagamento ser excluído.
+- Excluir a conta que pagou também desfaz os pagamentos feitos por ela.
+
 ### Dashboard
 
 `GET /dashboard/summary?month&year&today=YYYY-MM-DD` devolve:
 
+- `yearTotals` — `{ year, income, expense, balance }` de janeiro a dezembro do ano pedido, com a mesma regra dos KPIs do mês (pagos e previstos, sem transferências);
 - `totalBalance` — soma do `currentBalance` das contas;
 - `current` e `previous` — `{ income, expense, savings, openInvoices }` do mês e do mês anterior (`openInvoices` = compras no crédito pendentes no mês);
 - `expensesByCategory` — top 5 categorias de saída + "Outros";

@@ -42,6 +42,29 @@ export function dueDatesBetween(
   return dates;
 }
 
+/**
+ * Vencimento da fatura em que uma compra cai. A compra feita no dia do
+ * fechamento (ou depois) já vai para a fatura seguinte.
+ */
+export function dueDateForPurchase(
+  { closingDay, dueDay }: CreditCardDays,
+  purchaseDate: Date,
+): Date {
+  const year = purchaseDate.getUTCFullYear();
+  const month = purchaseDate.getUTCMonth();
+  const closingThisMonth = clampedDayOfMonth(year, month, closingDay);
+  const closing =
+    purchaseDate < closingThisMonth ? closingThisMonth : clampedDayOfMonth(year, month + 1, closingDay);
+
+  // Fecha antes de vencer (fecha 3, vence 10): vence no mesmo mês do
+  // fechamento. Fecha depois (fecha 25, vence 5): vence no mês seguinte.
+  return clampedDayOfMonth(
+    closing.getUTCFullYear(),
+    closing.getUTCMonth() + (closingDay < dueDay ? 0 : 1),
+    dueDay,
+  );
+}
+
 /** Período [start, end) de compras que entram na fatura com vencimento `dueDate`. */
 export function invoicePeriodForDueDate(
   { closingDay, dueDay }: CreditCardDays,

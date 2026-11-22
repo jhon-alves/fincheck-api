@@ -26,6 +26,9 @@ import {
 
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
 
+const PAID_IN_INVOICE_MESSAGE =
+  'Esta compra já foi paga numa fatura. Para mudar valor, data ou forma de pagamento, ou para excluí-la, exclua antes o pagamento da fatura.';
+
 async function findOwnedTransaction(userId: string, transactionId: string) {
   const transaction = await prisma.transaction.findFirst({
     where: { id: transactionId, userId },
@@ -57,7 +60,7 @@ export async function create(userId: string, body: CreateTransactionBody) {
         startDate: body.date,
         recurrence: body.recurrence,
       },
-      { firstPaid: body.paid },
+      { firstPaid: body.paymentMethod === 'CREDIT_CARD' ? false : body.paid },
     );
 
     return firstOccurrenceId
@@ -70,7 +73,9 @@ export async function create(userId: string, body: CreateTransactionBody) {
 
   const payment = await resolvePayment(userId, body);
   const date = toApiDate(body.date);
-  const paid = body.paid ?? payment.paymentMethod !== 'CREDIT_CARD';
+  // Compra no crédito nasce pendente e só fica paga pelo pagamento da fatura
+  // (POST /cards/:id/invoice/pay), que também tira o valor da conta.
+  const paid = payment.paymentMethod === 'CREDIT_CARD' ? false : (body.paid ?? true);
 
   const base = {
     userId,
@@ -284,6 +289,27 @@ export async function update(
     throw badRequest('Use a rota de transferências para editar transferências');
   }
 
+  if (current.type === 'INVOICE_PAYMENT') {
+    throw badRequest(
+      'Pagamento de fatura não pode ser editado. Exclua o pagamento e pague a fatura de novo.',
+    );
+  }
+
+  // No crédito, "pago" vem do pagamento da fatura, não do formulário.
+  if (body.paymentMethod === 'CREDIT_CARD') {
+    body = { ...body, paid: current.paymentMethod === 'CREDIT_CARD' ? current.paid : false };
+  }
+
+  if (
+    current.invoicePaymentId &&
+    (body.value !== current.value ||
+      toDateOnly(toApiDate(body.date)) !== toDateOnly(current.date) ||
+      body.paymentMethod !== current.paymentMethod ||
+      (body.cardId ?? null) !== current.cardId)
+  ) {
+    throw badRequest(PAID_IN_INVOICE_MESSAGE);
+  }
+
   if (current.installmentGroupId && body.type !== 'EXPENSE') {
     throw badRequest('Parcelas só podem ser saídas');
   }
@@ -297,6 +323,18 @@ export async function update(
   const dateChanged = toDateOnly(newDate) !== toDateOnly(current.date);
   const targets = await findScopeTargets(userId, current, scope);
   const currentNumber = current.installmentNumber ?? 1;
+  const paymentChanged =
+    payment.paymentMethod !== current.paymentMethod || payment.cardId !== current.cardId;
+
+  // Outras parcelas do escopo já pagas numa fatura também ficam travadas.
+  if (
+    targets.some(
+      (target) =>
+        target.invoicePaymentId && (body.value !== target.value || dateChanged || paymentChanged),
+    )
+  ) {
+    throw badRequest(PAID_IN_INVOICE_MESSAGE);
+  }
 
   const data = {
     name: body.name,
@@ -344,12 +382,33 @@ export async function remove(
 ) {
   const current = await findOwnedTransaction(userId, transactionId);
 
+  // Excluir o pagamento da fatura desfaz tudo: as compras voltam a ficar
+  // pendentes e o valor volta para a conta.
+  if (current.type === 'INVOICE_PAYMENT') {
+    await prisma.$transaction([
+      prisma.transaction.updateMany({
+        where: { userId, invoicePaymentId: current.id },
+        data: { paid: false, invoicePaymentId: null },
+      }),
+      prisma.transaction.delete({ where: { id: current.id } }),
+    ]);
+    return;
+  }
+
+  if (current.invoicePaymentId) {
+    throw badRequest(PAID_IN_INVOICE_MESSAGE);
+  }
+
   if (current.recurringRuleId) {
     await recurringService.removeOccurrence(current, scope);
     return;
   }
 
   const targets = await findScopeTargets(userId, current, scope);
+
+  if (targets.some((target) => target.invoicePaymentId)) {
+    throw badRequest(PAID_IN_INVOICE_MESSAGE);
+  }
 
   await prisma.transaction.deleteMany({
     where: { userId, id: { in: targets.map((target) => target.id) } },
@@ -358,7 +417,15 @@ export async function remove(
 
 /** Confirma o recebimento/pagamento (ou volta para pendente). */
 export async function confirm(userId: string, transactionId: string, paid = true) {
-  await findOwnedTransaction(userId, transactionId);
+  const transaction = await findOwnedTransaction(userId, transactionId);
+
+  if (transaction.paymentMethod === 'CREDIT_CARD') {
+    throw badRequest('Compras no crédito são pagas pela fatura. Use "Pagar fatura".');
+  }
+
+  if (transaction.type === 'INVOICE_PAYMENT') {
+    throw badRequest('Para desfazer um pagamento de fatura, exclua o pagamento.');
+  }
 
   return prisma.transaction.update({
     where: { id: transactionId },
